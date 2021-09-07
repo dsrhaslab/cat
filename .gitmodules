@@ -1,0 +1,6 @@
+[submodule "catracer/catbpf"]
+	path = catracer/catbpf
+	url = https://github.com/dsrhaslab/catbpf.git
+[submodule "catracer/catstrace"]
+	path = catracer/catstrace
+	url = https://github.com/dsrhaslab/catstrace.git

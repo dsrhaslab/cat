@@ -1,0 +1,131 @@
+[
+  {
+    "id": 1,
+    "type": "SND",
+    "order": 0,   
+    "timestamp": "6232853083615359",
+    "thread": "node1",
+    "dependency": null,
+    "dependencies": [],
+    "socket": "192.168.112.64:5000-192.168.112.68:52068",
+    "socket_type": "TCP",
+    "src": "192.168.112.64",
+    "src_port": 5000,
+    "dst": "192.168.112.68",
+    "dst_port": 52068,
+    "size": 12,
+    "returned_value": 12,
+    "pid": 123,
+    "data": {
+      "comm": "writer",
+      "host": "node1"
+    },
+    "data_similarities": {
+      "2": 1.0
+    }
+  },
+  {
+    "id": 2,
+    "type": "RCV",
+    "order": 1,   
+    "timestamp": "6224347079685224",
+    "thread": "node2",
+    "dependency": "1",
+    "dependencies": [
+      "1"
+    ],
+    "socket": "192.168.112.64:5000-192.168.112.68:52068",
+    "socket_type": "TCP",
+    "src": "192.168.112.64",
+    "src_port": 5000,
+    "dst": "192.168.112.68",
+    "dst_port": 52068,
+    "size": 4096,
+    "returned_value": 12,
+    "pid": 456,
+    "data": {
+      "comm": "echoApp",
+      "host": "node2"
+    },
+    "data_similarities": {
+      "1": 1.0
+    }
+  },
+  {
+    "id": 3,
+    "type": "WR",
+    "order": 2,  
+    "timestamp": "6224347079992148",
+    "thread": "node2",
+    "dependency": null,
+    "dependencies": [],
+    "size": 12,
+    "returned_value": 12,
+    "filename": "echo.txt",
+    "fd": 5,
+    "pid": 456,
+    "data": {
+      "comm": "echoApp",
+      "host": "node2"
+    },
+    "data_similarities": {
+      "4": 1.0,
+      "5": 1.0
+    }
+  },
+  {
+    "id": 4,
+    "type": "SND",
+    "order": 3,   
+    "timestamp": "6234541282685192",
+    "thread": "node2",
+    "dependency": null,
+    "dependencies": [],
+    "loc": "",
+    "socket": "192.168.112.68:52068-192.168.112.70:6000",
+    "socket_type": "TCP",
+    "src": "192.168.112.70",
+    "src_port": 6000,
+    "dst": "192.168.112.68",
+    "dst_port": 52068,
+    "size": 12,
+    "returned_value": 12,
+    "pid": 456,
+    "data": {
+      "comm": "echoApp",
+      "host": "node2"
+    },
+    "data_similarities": {
+      "3": 1.0,
+      "5": 1.0
+    }
+  },
+  {
+    "id": 5,
+    "type": "RCV",
+    "order": 4,
+    "timestamp": "6239541282685193",
+    "thread": "node1",
+    "dependency": "4",
+    "dependencies": [
+      "4"
+    ],
+    "socket": "192.168.112.68:52068-192.168.112.70:6000",
+    "socket_type": "TCP",
+    "src": "192.168.112.70",
+    "src_port": 6000,
+    "dst": "192.168.112.68",
+    "dst_port": 52068,
+    "size": 16384,
+    "returned_value": 3,
+    "pid": 14356,
+    "data": {
+      "comm": "nc",
+      "host": "node1"
+    },
+    "data_similarities": {
+      "3": 1.0,
+      "4": 1.0
+    }
+  }
+]
