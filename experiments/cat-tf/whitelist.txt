@@ -1,0 +1,1 @@
+/home/gsd/cat-tf/datasets/imagenet/tf_records
