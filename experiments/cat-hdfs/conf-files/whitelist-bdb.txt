@@ -1,1 +1,1 @@
-/home/gsd/bigdatabench/bdbcb/Hadoop/Bayes/
+/home/gsd/bigdatabenchCB/Hadoop/Bayes

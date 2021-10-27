@@ -2,16 +2,6 @@
 
 # Run command: ./run-bayes.sh
 
-#########################################################
-
-# Update these variables:
-USER="gsd"
-VOL_DFS="/home/$USER/dfs"
-HADOOP_PATH="$VOL_DFS/hadoop"
-
-#########################################################
-
-
 #--------------------------------------run-workload-----------------------#
 #Generates input dataset for training & testing classifier
 dir=/hadoop/Bayes
@@ -40,7 +30,7 @@ echo "Training Naive Bayes model"
   -ow #$c
 #------------------------------------------run------------------------------#
 
-$HADOOP_PATH/bin/hdfs dfs -rm -r /hadoop/Bayes/naivebayes-testing
+${HADOOP_INSTALL}/bin/hdfs dfs -rm -r /hadoop/Bayes/naivebayes-testing
 ${MAHOUT_HOME}/bin/mahout testnb \
  -i /hadoop/Bayes/naivebayes-test-vectors \
  -m /hadoop/Bayes/model \

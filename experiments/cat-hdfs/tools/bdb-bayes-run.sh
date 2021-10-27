@@ -3,20 +3,7 @@
 
 #########################################################
 
-# Update these variables:
-
-USER="gsd"
-WORKING_DIR="/mnt/nvme"
-CATBPF_BINARY_PATH="/home/$USER/go/bin"
-VOL_LOCAL="$WORKING_DIR/local"
-VOL_DFS="/home/$USER/dfs"
-BDB_INST_PATH="/home/$USER/bigdatabenchCB"
 RESULTS_PATH="$WORKING_DIR/bdb-bayes-results"
-CAT_HDFS_DIR="/home/$USER/cat-hdfs"
-
-
-#########################################################
-
 CONF_DIR="$CAT_HDFS_DIR/conf-files"
 BDB_PATH="$BDB_INST_PATH/Hadoop/Bayes"
 
@@ -25,19 +12,18 @@ readarray -t hosts < "$CONF_DIR/hosts"
 MASTER_ROW=(${hosts[0]})
 MASTER="${MASTER_ROW[0]}"
 MASTER_IP="${MASTER_ROW[1]}"
-HADOOP_PATH="$VOL_DFS/hadoop"
-
+HADOOP_INSTALL="$VOL_DFS/hadoop"
 
 HOST=$(hostname)
 HOST_IP=$(hostname -i)
 
-# cool_down_time_load=1680s
-cool_down_time_load=5s
+cool_down_time_load=1680s
 
 
 # Logging message
 LOG="--- bdb-bayes-run.sh >>"
 
+#########################################################
 
 function clean_up_hdfs {
     echo "$LOG clean_up_hdfs"
@@ -52,11 +38,11 @@ function clean_up_hdfs {
     # format file system
     for (( i=0; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        ssh $USER@${host_row[1]} "rm -rf $VOL_LOCAL/*"
+        ssh $CAT_USER@${host_row[1]} "rm -rf $VOL_LOCAL/*"
     done
 
     # format hdfs-namenode
-    ssh $USER@$MASTER 'echo "y" | '$HADOOP_PATH'/bin/hdfs namenode -format'
+    ssh $CAT_USER@$MASTER 'echo "y" | '$HADOOP_INSTALL'/bin/hdfs namenode -format'
 }
 
 # Launch dstat in each node
@@ -70,12 +56,12 @@ function dstat_launch {
     DSTAT_PIDS=()
 
     namenode=(${hosts[0]})
-    dstat_pid=$(ssh $USER@${namenode[1]} "dstat --time --cpu --mem --net --disk --swap --output /home/$USER/dstat-$1-$2G-namenode-$3.csv &>/dev/null & echo \$!")
+    dstat_pid=$(ssh $CAT_USER@${namenode[1]} "dstat --time --cpu --mem --net --disk --swap --output /home/$CAT_USER/dstat-$1-$2G-namenode-$3.csv &>/dev/null & echo \$!")
     DSTAT_PIDS+=("${namenode[1]} $dstat_pid")
 
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        dstat_pid=$(ssh $USER@${host_row[1]} "dstat --time --cpu --mem --net --disk --swap --output /home/$USER/dstat-$1-$2G-datanode$i-$3.csv &>/dev/null & echo \$!")
+        dstat_pid=$(ssh $CAT_USER@${host_row[1]} "dstat --time --cpu --mem --net --disk --swap --output /home/$CAT_USER/dstat-$1-$2G-datanode$i-$3.csv &>/dev/null & echo \$!")
         DSTAT_PIDS+=("${host_row[1]} $dstat_pid")
     done
 
@@ -83,7 +69,7 @@ function dstat_launch {
     for a in "${DSTAT_PIDS[@]}"; do stringarray=($a); echo -n "${stringarray[1]} (${stringarray[0]}); "; done
     echo ""
 
-    screen -S BDB_DSTAT -d -m ssh $HOST_IP "dstat --time --cpu --mem --net --disk --swap --output /home/$USER/dstat-$1-$2G-client-$3.csv"
+    screen -S BDB_DSTAT -d -m ssh $HOST_IP "dstat --time --cpu --mem --net --disk --swap --output /home/$CAT_USER/dstat-$1-$2G-client-$3.csv"
 }
 
 # Stop dstat in each node
@@ -96,7 +82,7 @@ function dstat_stop {
     # stop client dstat and copy data to $RESULTS_PATH
     screen -X -S BDB_DSTAT quit
     mkdir -p $RESULTS_PATH/$2G/
-    mv /home/$USER/dstat-$1-$2G-client-$3.csv $RESULTS_PATH/$2G/dstat-$1-$2G-client-$3.csv
+    mv /home/$CAT_USER/dstat-$1-$2G-client-$3.csv $RESULTS_PATH/$2G/dstat-$1-$2G-client-$3.csv
 
     DSTAT_PIDS_TO_STOP=( "${DSTAT_PIDS[@]}" )
     echo -n "$LOG dstat-stop:  killing dstat instances: "
@@ -108,18 +94,18 @@ function dstat_stop {
         stringarray=($val)
         ip="${stringarray[0]}"
         dstat_pid="${stringarray[1]}"
-        ssh $USER@$ip "sudo kill -9 $dstat_pid"
+        ssh $CAT_USER@$ip "sudo kill -9 $dstat_pid"
     done
     sleep 10
 
     # copy data to $RESULTS_PATH for namenode
     namenode=(${hosts[0]})
-    ssh $USER@${namenode[1]} "mv /home/$USER/dstat-$1-$2G-namenode-$3.csv $RESULTS_PATH/$2G/dstat-$1-$2G-namenode-$3.csv"
+    ssh $CAT_USER@${namenode[1]} "mv /home/$CAT_USER/dstat-$1-$2G-namenode-$3.csv $RESULTS_PATH/$2G/dstat-$1-$2G-namenode-$3.csv"
 
     # copy data to $RESULTS_PATH for datanodes
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        ssh $USER@${host_row[1]} "mv /home/$USER/dstat-$1-$2G-datanode$i-$3.csv $RESULTS_PATH/$2G/dstat-$1-$2G-datanode$i-$3.csv"
+        ssh $CAT_USER@${host_row[1]} "mv /home/$CAT_USER/dstat-$1-$2G-datanode$i-$3.csv $RESULTS_PATH/$2G/dstat-$1-$2G-datanode$i-$3.csv"
     done
 }
 
@@ -134,11 +120,11 @@ function catbpf_launch {
 
     # Get Namenode and datanodes pids
     namenode=(${hosts[0]})
-    namenode_pid=$(ssh $USER@${namenode[1]} 'jps | grep " NameNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
+    namenode_pid=$(ssh $CAT_USER@${namenode[1]} 'jps | grep " NameNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
     NODES_PIDS+=("${namenode[1]} $namenode_pid")
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        datanode_pid=$(ssh $USER@${host_row[1]} 'jps | grep " DataNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
+        datanode_pid=$(ssh $CAT_USER@${host_row[1]} 'jps | grep " DataNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
         NODES_PIDS+=("${host_row[1]} $datanode_pid")
     done
     echo -n "$LOG catbpf-launch:  Nodes are: "
@@ -150,7 +136,7 @@ function catbpf_launch {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        catbpf_pid=$(ssh $USER@${ip} "sudo -E $CATBPF_BINARY_PATH/catbpf --stats --whitelist $CONF_DIR/whitelist-bdb.txt --log2file -c 4 --pid $node_pid &>/dev/null & echo \$!")
+        catbpf_pid=$(ssh $CAT_USER@${ip} "sudo -E $CATBPF_BINARY_PATH/catbpf --stats --whitelist $CONF_DIR/whitelist-bdb.txt --log2file -c 4 --pid $node_pid &>/dev/null & echo \$!")
         CATBPF_PIDS+=("${ip} $catbpf_pid")
     done
     echo -n "$LOG catbpf-launch:  CatBpf instances: "
@@ -176,7 +162,7 @@ function catbpf_stop {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        ssh $USER@${ip} "sudo kill -s SIGINT $node_pid"
+        ssh $CAT_USER@${ip} "sudo kill -s SIGINT $node_pid"
     done
 
     echo "$LOG catbpf-stop:  Waiting for CatBpf instances to finish..."
@@ -184,19 +170,19 @@ function catbpf_stop {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        ssh $USER@${ip} "while ps -p $node_pid >/dev/null 2>&1; do sleep 10; done"
+        ssh $CAT_USER@${ip} "while ps -p $node_pid >/dev/null 2>&1; do sleep 10; done"
     done
 
     # copy data to $RESULTS_PATH for namenode
     namenode=(${hosts[0]})
-    ssh $USER@${namenode[1]} "mv /home/$USER/catbpf.log $RESULTS_PATH/$2G/catbpf-$1-$2G-namenode-$3.txt;"
-    ssh $USER@${namenode[1]} "mv /home/$USER/CATlog.json $RESULTS_PATH/$2G/trace-$1-$2G-namenode-$3.json"
+    ssh $CAT_USER@${namenode[1]} "mv /home/$CAT_USER/catbpf.log $RESULTS_PATH/$2G/catbpf-$1-$2G-namenode-$3.txt;"
+    ssh $CAT_USER@${namenode[1]} "mv /home/$CAT_USER/CATlog.json $RESULTS_PATH/$2G/trace-$1-$2G-namenode-$3.json"
 
     # copy data to $RESULTS_PATH for datanodes
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        ssh $USER@${host_row[1]} "mv /home/$USER/catbpf.log $RESULTS_PATH/$2G/catbpf-$1-$2G-datanode$i-$3.txt;"
-        ssh $USER@${host_row[1]} "mv /home/$USER/CATlog.json $RESULTS_PATH/$2G/trace-$1-$2G-datanode$i-$3.json;"
+        ssh $CAT_USER@${host_row[1]} "mv /home/$CAT_USER/catbpf.log $RESULTS_PATH/$2G/catbpf-$1-$2G-datanode$i-$3.txt;"
+        ssh $CAT_USER@${host_row[1]} "mv /home/$CAT_USER/CATlog.json $RESULTS_PATH/$2G/trace-$1-$2G-datanode$i-$3.json;"
     done
 
     # copy data to $RESULTS_PATH for client
@@ -215,11 +201,11 @@ function strace_launch {
 
     # Get Namenode and datanodes pids
     namenode=(${hosts[0]})
-    namenode_pid=$(ssh $USER@${namenode[1]} 'jps | grep " NameNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
+    namenode_pid=$(ssh $CAT_USER@${namenode[1]} 'jps | grep " NameNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
     NODES_PIDS+=("${namenode[1]} $namenode_pid")
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        datanode_pid=$(ssh $USER@${host_row[1]} 'jps | grep " DataNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
+        datanode_pid=$(ssh $CAT_USER@${host_row[1]} 'jps | grep " DataNode" | cut -d" " -f1 | xargs --no-run-if-empty -I@ bash -c "echo @"')
         NODES_PIDS+=("${host_row[1]} $datanode_pid")
     done
     echo -n "$LOG strace-launch:  Nodes are: "
@@ -231,13 +217,12 @@ function strace_launch {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        strace_pid=$(ssh $USER@${ip} "sudo -E strace -o /home/$USER/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -s 262144 -tt -yy -f -p $node_pid &>/dev/null & echo \$!")
+        strace_pid=$(ssh $CAT_USER@${ip} "sudo -E strace -o /home/$CAT_USER/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -s 262144 -tt -yy -f -p $node_pid &>/dev/null & echo \$!")
         STRACE_PIDS+=("${ip} $strace_pid")
     done
     echo -n "$LOG strace-launch:  Strace instances: "
     for a in "${STRACE_PIDS[@]}"; do stringarray=($a); echo -n "${stringarray[1]} (${stringarray[0]}); "; done
     echo ""
-    sleep 10s
 
 }
 
@@ -258,7 +243,7 @@ function strace_stop {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        ssh $USER@${ip} "sudo kill -s SIGINT $node_pid"
+        ssh $CAT_USER@${ip} "sudo kill -s SIGINT $node_pid"
     done
 
     echo "$LOG strace-stop:  Waiting for Strace instances to finish..."
@@ -266,7 +251,7 @@ function strace_stop {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        ssh $USER@${ip} "while ps -p $node_pid >/dev/null 2>&1; do sleep 10; done"
+        ssh $CAT_USER@${ip} "while ps -p $node_pid >/dev/null 2>&1; do sleep 10; done"
     done
 
 }
@@ -281,29 +266,28 @@ function catstrace_launch {
 
      # for client
     echo -n "->>>>STRACE CLI SIZE:"
-    ls -lsh /home/$USER/strace.out
+    ls -lsh /home/$CAT_USER/strace.out
 
     # for namenode
     namenode=(${hosts[0]})
     echo -n "->>>>STRACE NN$i  SIZE: "
-    ssh $USER@${namenode[1]} "ls -lsh /home/$USER/strace.out"
-    catstrace_pid=$(ssh $USER@${namenode[1]} "sudo -E catstrace --input /home/$USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$2G/trace-$1-$2G-namenode-$3.json &>/dev/null & echo \$!")
+    ssh $CAT_USER@${namenode[1]} "ls -lsh /home/$CAT_USER/strace.out"
+    catstrace_pid=$(ssh $CAT_USER@${namenode[1]} "sudo -E catstrace --input /home/$CAT_USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$2G/trace-$1-$2G-namenode-$3.json &>/dev/null & echo \$!")
     CATSTRACE_PIDS+=("${namenode[1]} $catstrace_pid")
 
     # for datanodes
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
         echo -n "->>>>STRACE DN$i  SIZE: "
-        ssh $USER@${host_row[1]} "ls -lsh /home/$USER/strace.out"
+        ssh $CAT_USER@${host_row[1]} "ls -lsh /home/$CAT_USER/strace.out"
         echo ""
-        catstrace_pid=$(ssh $USER@${host_row[1]} "sudo -E catstrace --input /home/$USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$2G/trace-$1-$2G-datanode$i-$3.json &>/dev/null & echo \$!")
+        catstrace_pid=$(ssh $CAT_USER@${host_row[1]} "sudo -E catstrace --input /home/$CAT_USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$2G/trace-$1-$2G-datanode$i-$3.json &>/dev/null & echo \$!")
         CATSTRACE_PIDS+=("${host_row[1]} $catstrace_pid")
     done
 
     echo -n "$LOG strace-launch:  catstrace instances: "
     for a in "${CATSTRACE_PIDS[@]}"; do stringarray=($a); echo -n "${stringarray[1]} (${stringarray[0]}); "; done
     echo ""
-    sleep 10s
 }
 
 # Stop strace in each node
@@ -319,27 +303,27 @@ function catstrace_stop {
         stringarray=($val)
         ip="${stringarray[0]}"
         node_pid="${stringarray[1]}"
-        ssh $USER@${ip} "while ps -p $node_pid >/dev/null 2>&1; do sleep 10; done"
+        ssh $CAT_USER@${ip} "while ps -p $node_pid >/dev/null 2>&1; do sleep 10; done"
     done
 
     # copy data to $RESULTS_PATH for namenode
     namenode=(${hosts[0]})
-    ssh $USER@${namenode[1]} "mv /home/$USER/catstrace.log $RESULTS_PATH/$2G/catstrace-$1-$2G-namenode-$3.txt;"
-    ssh $USER@${namenode[1]} "mv /home/$USER/CatStrace-stats.json $RESULTS_PATH/$2G/catstrace-stats-$1-$2G-namenode$i-$3.txt;"
-    ssh $USER@${namenode[1]} "sudo rm /home/$USER/strace.out;"
+    ssh $CAT_USER@${namenode[1]} "mv /home/$CAT_USER/catstrace.log $RESULTS_PATH/$2G/catstrace-$1-$2G-namenode-$3.txt;"
+    ssh $CAT_USER@${namenode[1]} "mv /home/$CAT_USER/CatStrace-stats.json $RESULTS_PATH/$2G/catstrace-stats-$1-$2G-namenode$i-$3.txt;"
+    ssh $CAT_USER@${namenode[1]} "sudo rm /home/$CAT_USER/strace.out;"
 
     # copy data to $RESULTS_PATH for datanodes
     for (( i=1; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-        ssh $USER@${host_row[1]} "mv /home/$USER/catstrace.log $RESULTS_PATH/$2G/catstrace-$1-$2G-datanode$i-$3.txt;"
-        ssh $USER@${host_row[1]} "mv /home/$USER/CatStrace-stats.json $RESULTS_PATH/$2G/catstrace-stats-$1-$2G-datanode$i-$3.txt;"
-        ssh $USER@${host_row[1]} "sudo rm /home/$USER/strace.out;"
+        ssh $CAT_USER@${host_row[1]} "mv /home/$CAT_USER/catstrace.log $RESULTS_PATH/$2G/catstrace-$1-$2G-datanode$i-$3.txt;"
+        ssh $CAT_USER@${host_row[1]} "mv /home/$CAT_USER/CatStrace-stats.json $RESULTS_PATH/$2G/catstrace-stats-$1-$2G-datanode$i-$3.txt;"
+        ssh $CAT_USER@${host_row[1]} "sudo rm /home/$CAT_USER/strace.out;"
     done
 
     # copy data to $RESULTS_PATH for client
     mv catstrace.log $RESULTS_PATH/$2G/catstrace-$1-$2G-client-$3.txt
     mv CatStrace-stats.json $RUN_DIR/catstrace-stats-$1-$2G-client-$3.txt
-    sudo rm /home/$USER/strace.out
+    sudo rm /home/$CAT_USER/strace.out
 }
 
 # Run BigDataBench - Bayes - GenData
@@ -352,19 +336,16 @@ function gen_data_bdb {
     mkdir -p $RESULTS_PATH/$1G/
     for (( i=0; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-		ssh $USER@${host_row[1]} "mkdir -p $RESULTS_PATH/$1G/"
+		ssh $CAT_USER@${host_row[1]} "mkdir -p $RESULTS_PATH/$1G/"
 	done
 
     cd $BDB_PATH
 
     echo "$LOG gen_data_bdb-$2: format hdfs"
     clean_up_hdfs
-    ssh $USER@$MASTER_IP $HADOOP_PATH/sbin/start-dfs.sh
+    ssh $CAT_USER@$MASTER_IP $HADOOP_INSTALL/sbin/start-dfs.sh
 
-    # $HADOOP_PATH/bin/hdfs dfs -mkdir /hadoop/
-    # $HADOOP_PATH/bin/hdfs dfs -mkdir -p /hadoop/Bayes/
-    $HADOOP_PATH/bin/hdfs dfs -chown root /
-    # $HADOOP_PATH/bin/hdfs dfs -chown root /hadoop/
+    $HADOOP_INSTALL/bin/hdfs dfs -chown root /
 
     # start dstat
     dstat_launch genData "$1" "$2"
@@ -372,16 +353,16 @@ function gen_data_bdb {
     # start tracer
     case $3 in
         vanilla)
-            sudo -E /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-genData-$1G-$2 ./genData-bayes.sh $1
+            sudo -E /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-genData-$1G-$2 ./genData-bayes.sh $1 2>&1 | tee -a $RESULTS_PATH/$1G/log-genData-$1G-$2.txt
             ;;
         catbpf)
             catbpf_launch genData "$1" "$2"
-            sudo -E $CATBPF_BINARY_PATH/catbpf --stats --whitelist $CONF_DIR/whitelist-bdb.txt -log2file -c 4 /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-genData-$1G-$2 ./genData-bayes.sh $1
+            sudo -E $CATBPF_BINARY_PATH/catbpf --stats --whitelist $CONF_DIR/whitelist-bdb.txt -log2file -c 4 /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-genData-$1G-$2 ./genData-bayes.sh $1 2>&1 | tee -a $RESULTS_PATH/$1G/log-genData-$1G-$2.txt
             catbpf_stop genData "$1" "$2"
             ;;
         catstrace)
             strace_launch genData "$1" "$2"
-            sudo -E strace -o /home/$USER/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -s 262144 -tt -yy -f /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-genData-$1G-$2 ./genData-bayes.sh $1
+            sudo -E strace -o /home/$CAT_USER/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -s 262144 -tt -yy -f /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-genData-$1G-$2 ./genData-bayes.sh $1 2>&1 | tee -a $RESULTS_PATH/$1G/log-genData-$1G-$2.txt
             strace_stop genData "$1" "$2"
             ;;
     esac
@@ -392,12 +373,9 @@ function gen_data_bdb {
 
     if [[ "$3" == "catstrace" ]]; then
         catstrace_launch genData "$1" "$2"
-        sudo -E catstrace --input /home/$USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$1G/trace-genData-$1G-client-$2.json
+        sudo -E catstrace --input /home/$CAT_USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$1G/trace-genData-$1G-client-$2.json
         catstrace_stop genData "$1" "$2"
     fi
-
-
-    sleep 30s
 }
 
 # Run BigDataBench - Bayes - Benchmark
@@ -410,7 +388,7 @@ function run_bdb {
     mkdir -p $RESULTS_PATH/$1G/
     for (( i=0; i<${#hosts[@]}; i++ )); do
         host_row=(${hosts[$i]})
-		ssh $USER@${host_row[1]} "mkdir -p $RESULTS_PATH/$1G/"
+		ssh $CAT_USER@${host_row[1]} "mkdir -p $RESULTS_PATH/$1G/"
 	done
 
     cd $BDB_PATH
@@ -424,13 +402,13 @@ function run_bdb {
         sleep $cool_down_time_load
 
         echo "$LOG run_bdb-$run: Restarting HDFS"
-        ssh $USER@$MASTER $HADOOP_PATH/sbin/stop-dfs.sh
-        ssh $USER@$MASTER $HADOOP_PATH/sbin/start-dfs.sh
+        ssh $CAT_USER@$MASTER $HADOOP_INSTALL/sbin/stop-dfs.sh
+        ssh $CAT_USER@$MASTER $HADOOP_INSTALL/sbin/start-dfs.sh
 
         echo "$LOG run_bdb-$run: Cleaning caches"
         $CAT_HDFS_DIR/tools/hdfs-clean-up.sh clean_cache
 
-        echo $USER@"$LOG_IP run_bdb-$run: Starting run-bayes"
+        echo $CAT_USER@"$LOG_IP run_bdb-$run: Starting run-bayes"
 
         # start dstat
         dstat_launch run "$1" "$run"
@@ -438,16 +416,16 @@ function run_bdb {
          # start tracer
         case $3 in
             vanilla)
-                sudo -E /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-run-$1G-$run ./run-bayes.sh
+                sudo -E /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-run-$1G-$run ./run-bayes.sh 2>&1 | tee -a $RESULTS_PATH/$1G/log-run-$1G-$run.txt
                 ;;
             catbpf)
                 catbpf_launch run "$1" "$run"
-                sudo -E $CATBPF_BINARY_PATH/catbpf --stats --whitelist $CONF_DIR/whitelist-bdb.txt -log2file -c 6 /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-run-$1G-$run ./run-bayes.sh
+                sudo -E $CATBPF_BINARY_PATH/catbpf --stats --whitelist $CONF_DIR/whitelist-bdb.txt -log2file -c 6 /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-run-$1G-$run ./run-bayes.sh 2>&1 | tee -a $RESULTS_PATH/$1G/log-run-$1G-$run.txt
                 catbpf_stop run "$1" "$run"
                 ;;
             catstrace)
                 strace_launch run "$1" "$run"
-                sudo -E strace -o /home/$USER/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -s 262144 -tt -yy -f /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-run-$1G-$run ./run-bayes.sh
+                sudo -E strace -o /home/$CAT_USER/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -s 262144 -tt -yy -f /usr/bin/time --verbose --output=$RESULTS_PATH/$1G/time-run-$1G-$run ./run-bayes.sh 2>&1 | tee -a $RESULTS_PATH/$1G/log-run-$1G-$run.txt
                 strace_stop run "$1" "$run"
                 ;;
         esac
@@ -457,7 +435,7 @@ function run_bdb {
 
         if [[ "$3" == "catstrace" ]]; then
             catstrace_launch run "$1" "$run"
-            sudo -E catstrace --input /home/$USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$1G/trace-run-$1G-client-$run.json
+            sudo -E catstrace --input /home/$CAT_USER/strace.out --whitelist $CONF_DIR/whitelist-bdb.txt --stats --esize 262144 --trace_output $RESULTS_PATH/$1G/trace-run-$1G-client-$run.json
             catstrace_stop run "$1" "$run"
         fi
 

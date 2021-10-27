@@ -7,7 +7,7 @@ SCRIPT_DIR="$CAT_TF_DIR/official-models-2.1.0/official/vision/image_classificati
 VENV_DIR="$CAT_TF_DIR/tf-venv"
 RESOURCES_DIR="$CAT_TF_DIR/resources"
 RESULTS_DIR="$CAT_TF_DIR/results"
-LOCAL_DATASET_DIR="$CAT_TF_DIR/datasets/imagenet/tf_records/"
+DATASET_DIR="$CAT_TF_DIR/datasets/imagenet"
 CHECKPOINTING_DIR="/tmp/checkpointing"
 # ======================================================================================
 
@@ -17,7 +17,8 @@ BATCH_SIZE=64
 EPOCHS=10
 NUM_GPUS=1
 DEPLOYMENT=vanilla
-
+LOCAL_DATASET_DIR="$DATASET_DIR/imagenet2012/tf_records"
+WHITELIST_FILE=whitelist-imagenet2012.txt
 # Current date
 DATE="$(date +%Y_%m_%d-%H_%M)"
 
@@ -95,36 +96,22 @@ function select-train-model {
 	elif [ "$MODEL" == "lenet" ]
 	then
 		echo -e "Model: LeNet\nDataset: ImageNet\nBatch size: $BATCH_SIZE\n#Epochs: $EPOCHS\nShuffle Buffer: $SHUFFLE_BUFFER\nGPUs: $NUM_GPUS\nFramework: Tensorflow" > $RUN_DIR/info-$RUN_NAME.txt
-		if $RUN_CIA ; then
-			MODEL_SCRIPT=lenet_imagenet_main_cia.py
-			echo -e "CIA: true" >> $RUN_DIR/info-$RUN_NAME.txt
-		else
-			MODEL_SCRIPT=lenet_imagenet_main.py
-		fi
+		MODEL_SCRIPT=lenet_imagenet_main.py
 	else
 		echo "Select a valid model. Run train-model -h to see the available models"
 	fi
 }
 
 function select-deployment {
-	if $RUN_CIA && $SHUFFLE == false ; then
-		SHUFFLE_FLAG="--shuffle false"
-		echo -e "Shuffle: Off" >> $RUN_DIR/info-$RUN_NAME.txt
-	elif $RUN_CIA && ${SHUFFLE} ; then
-		SHUFFLE_FLAG="--shuffle true"
-		echo -e "Shuffle: On" >> $RUN_DIR/info-$RUN_NAME.txt
-	else
-		SHUFFLE_FLAG=""
-	fi
 	UNBUFFER_PATH=$(which unbuffer)
 	if [ "$DEPLOYMENT" == "vanilla" ]
 	then
 		echo -e "Deployment: Vanilla" >> $RUN_DIR/info-$RUN_NAME.txt
-		$UNBUFFER_PATH -p $VENV_DIR/bin/python3 $SCRIPT_DIR/$MODEL_SCRIPT $SHUFFLE_FLAG --train_epochs=$EPOCHS --batch_size=$BATCH_SIZE --model_dir=$CHECKPOINTING_DIR --data_dir=$LOCAL_DATASET_DIR --num_gpus=$NUM_GPUS | tee $RUN_DIR/log-$RUN_NAME.txt
+		$UNBUFFER_PATH -p $VENV_DIR/bin/python3 $SCRIPT_DIR/$MODEL_SCRIPT --train_epochs=$EPOCHS --batch_size=$BATCH_SIZE --model_dir=$CHECKPOINTING_DIR --data_dir=$LOCAL_DATASET_DIR --num_gpus=$NUM_GPUS | tee $RUN_DIR/log-$RUN_NAME.txt
 	elif [ "$DEPLOYMENT" == "catbpf" ]
 	then
 		echo -e "Deployment: CatBpf" >> $RUN_DIR/info-$RUN_NAME.txt
-		sudo -E env PYTHONPATH=$PYTHONPATH $HOME/go/bin/catbpf --stats --whitelist whitelist.txt -log2file -c 4 $UNBUFFER_PATH -p $VENV_DIR/bin/python3 $SCRIPT_DIR/$MODEL_SCRIPT $SHUFFLE_FLAG --train_epochs=$EPOCHS --batch_size=$BATCH_SIZE --model_dir=$CHECKPOINTING_DIR --data_dir=$LOCAL_DATASET_DIR --num_gpus=$NUM_GPUS | tee $RUN_DIR/log-$RUN_NAME.txt
+		sudo -E env PYTHONPATH=$PYTHONPATH $HOME/go/bin/catbpf --stats --whitelist $WHITELIST_FILE -log2file -c 4 $UNBUFFER_PATH -p $VENV_DIR/bin/python3 $SCRIPT_DIR/$MODEL_SCRIPT --train_epochs=$EPOCHS --batch_size=$BATCH_SIZE --model_dir=$CHECKPOINTING_DIR --data_dir=$LOCAL_DATASET_DIR --num_gpus=$NUM_GPUS | tee $RUN_DIR/log-$RUN_NAME.txt
 		mv CATlog.json $RUN_DIR/trace-$RUN_NAME.json
 		mv catbpf.log $RUN_DIR/catbpf-log-$RUN_NAME.txt
 	elif [ "$DEPLOYMENT" == "catstrace" ]
@@ -132,13 +119,13 @@ function select-deployment {
 		echo -e "Deployment: CatStrace" >> $RUN_DIR/info-$RUN_NAME.txt
 
 		echo -e "Running strace..."
-		sudo -E env PYTHONPATH=$PYTHONPATH strace -o $RUN_DIR/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -tt -yy -f -s 262144  $UNBUFFER_PATH -p $VENV_DIR/bin/python3 $SCRIPT_DIR/$MODEL_SCRIPT $SHUFFLE_FLAG --train_epochs=$EPOCHS --batch_size=$BATCH_SIZE --model_dir=$CHECKPOINTING_DIR --data_dir=$LOCAL_DATASET_DIR --num_gpus=$NUM_GPUS | tee $RUN_DIR/log-$RUN_NAME.txt
+		sudo -E env PYTHONPATH=$PYTHONPATH strace -o $RUN_DIR/strace.out -e trace=open,openat,read,pread64,write,pwrite64,accept,accept4,connect,socket,recv,recvfrom,recvmsg,send,sendto,sendmsg -tt -yy -f -s 262144  $UNBUFFER_PATH -p $VENV_DIR/bin/python3 $SCRIPT_DIR/$MODEL_SCRIPT --train_epochs=$EPOCHS --batch_size=$BATCH_SIZE --model_dir=$CHECKPOINTING_DIR --data_dir=$LOCAL_DATASET_DIR --num_gpus=$NUM_GPUS | tee $RUN_DIR/log-$RUN_NAME.txt
 
 		read -p "Parse strace output with catstrace? (Y/N): " confirm
 		if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]] ; then
 			# run catstrace
 			echo -e "Running CatStrace (parsing strace output)"
-			sudo -E env PYTHONPATH=$PYTHONPATH catstrace --stats --whitelist whitelist.txt --input $RUN_DIR/strace.out
+			sudo -E env PYTHONPATH=$PYTHONPATH catstrace --stats --whitelist $WHITELIST_FILE --input $RUN_DIR/strace.out
 			mv CATlog.json $RUN_DIR/trace-$RUN_NAME.json
 			mv CatStrace-stats.json $RUN_DIR/catstrace-stats-$RUN_NAME.txt
 			mv catstrace.log $RUN_DIR/catstrace-log-$RUN_NAME.txt
@@ -166,7 +153,7 @@ export-vars
 
 # Handle flags
 echo -e "\nHandling flags..."
-while getopts ":hm:b:e:s:g:d:c:x:" opt; do
+while getopts ":hm:b:e:g:sd:" opt; do
 	case $opt in
 		h)
 			echo "$package - train Tensorflow models on ImageNet dataset"
@@ -180,8 +167,7 @@ while getopts ":hm:b:e:s:g:d:c:x:" opt; do
 			echo "-e       specify number of epochs"
 			echo "-g       specify number of GPUs"
 			echo "-d       specify the deployment (vanilla, catbpf, catstrace)"
-			echo "-c       run cia version"
-			echo "-x       shuffle files"
+			echo "-s       use dataset imagenette"
 			exit 0
 			;;
 		m)
@@ -204,13 +190,10 @@ while getopts ":hm:b:e:s:g:d:c:x:" opt; do
 			echo "-d was triggered, Parameter: $OPTARG" >&2
 			DEPLOYMENT=$OPTARG
 			;;
-		c)
-			echo "-c was triggered, Parameter: $OPTARG" >&2
-			RUN_CIA=$OPTARG
-			;;
-		x)
-			echo "-x was triggered, Parameter: $OPTARG" >&2
-			SHUFFLE=$OPTARG
+		s)
+			echo "-s was triggered. Dataset: imagenette" >&2
+			LOCAL_DATASET_DIR="$DATASET_DIR/imagenette2/tf_records"
+			WHITELIST_FILE=whitelist-imagenette.txt
 			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2

@@ -1,15 +1,5 @@
 #!/bin/bash
 
-#########################################################
-
-# Update these variables:
-USER="gsd"
-VOL_DFS="/home/$USER/dfs"
-HADOOP_PATH="$VOL_DFS/hadoop"
-
-#########################################################
-
-
 ##
 # Function: Generate text data
 #
@@ -45,7 +35,7 @@ mkdir -p "$DATA_DIR"
 c=1
 while [ $i -le $NUMBER_OF_FILES ]; do
 	#./gen_random_text $MODEL_NAME $LINES_PER_FILE $WORDS_PER_LINE $i > "$DATA_DIR/${MODEL_NAME}_${i}"&
-	./gen_random_text $MODEL_NAME $LINES_PER_FILE $WORDS_PER_LINE $i | $HADOOP_PATH/bin/hdfs dfs -appendToFile - /hadoop/Bayes/data-naivebayes/$DATA_DIR/${MODEL_NAME}_${i} &
+	./gen_random_text $MODEL_NAME $LINES_PER_FILE $WORDS_PER_LINE $i | $HADOOP_INSTALL/bin/hdfs dfs -appendToFile - /hadoop/Bayes/data-naivebayes/$DATA_DIR/${MODEL_NAME}_${i} &
 	let i++
 
 	let c++
